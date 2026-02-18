@@ -158,10 +158,10 @@ model string from [openrouter.ai/models](https://openrouter.ai/models).
 
 A demonstration of a benign task executing through the full pipeline with Merkle verification at each step:
 
-<video src="safe.mp4" controls width="100%"></video>
+[Watch Safe Execution Demo](./safe.mp4)
 
 ### Adversarial Execution Flow
 
 A demonstration showing the system halting early when a potentially dangerous plan is detected by the safety model:
 
-<video src="adversarial.mp4" controls width="100%"></video>
+[Watch Adversarial Execution Demo](./adversarial.mp4)
