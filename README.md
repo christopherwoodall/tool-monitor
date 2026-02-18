@@ -1,20 +1,8 @@
-# merkle-cfi-agent
+# tool-monitor
 
 A secure agentic harness using **Merkle-tree Control-Flow Integrity** and a
 **Plan-then-Execute** routing pattern. Built as a minimal, readable prototype
 for reasoning about LLM agent security.
-
----
-
-## Getting Started
-
-```bash
-python3 -m venv venv
-. venv/bin/activate
-pip install uv
-uv pip install -e .
-tool-monitor
-```
 
 ---
 
@@ -108,6 +96,25 @@ flowchart TD
 
 ---
 
+## Getting Started
+
+```bash
+# 1. Clone and install
+python3 -m venv venv
+. venv/bin/activate
+pip install uv
+uv pip install -e .
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env — add your OPENROUTER_API_KEY
+
+# 3. Run
+tool-monitor
+```
+
+---
+
 ## ReACT Format (Tool Model)
 
 Each execution step uses ReACT (Reason + Act):
@@ -121,24 +128,6 @@ Args: <JSON object>
 The harness parses this, executes the tool from the registry, and feeds the
 observation back as context for the next step. The tool model never calls
 anything directly.
-
----
-
-## Setup
-
-```bash
-# 1. Clone and install
-pip install -e .
-
-# 2. Configure environment
-cp .env.example .env
-# Edit .env — add your OPENROUTER_API_KEY
-
-# 3. Run
-python run.py
-# or
-merkle-agent
-```
 
 ---
 
