@@ -43,49 +43,67 @@ run.py        — Entry point: config + wiring only
 
 ## Control Flow
 
-```
-User Prompt
-    │
-    ▼
-User Model
-    │
-    ├─ No <planthenexecute> ──────────────────────► Return direct response
-    │
-    ▼
-Scaffold: Parse + validate JSON plan
-    │
-    ▼
-Build Merkle Tree (commit root)
-    │
-    ▼
-Tool Model: Inspect full plan
-    │
-    ├─ UNSAFE ────────────────────────────────────► Halt + rejection message
-    │
-    ▼
-Execution Loop (per step):
-    ├─ Scaffold: verify_leaf(index, step) ← BEFORE tool model sees it
-    ├─ Hash mismatch ─────────────────────────────► IntegrityError — halt
-    └─ Tool Model: ReACT cycle (Thought → Action → Observation)
-            │
-            ▼
-        Harness executes tool from registry
-            │
-            ▼
-        Append ExecutionRecord to log
-            │
-    Next step (N+1 with prior observation as context)
-    │
-    ▼
-Post-execution root verification
-    │
-    ├─ Root mismatch ─────────────────────────────► Discard results — halt
-    │
-    ▼
-User Model: Synthesize final response from verified execution trace
-    │
-    ▼
-Return to caller
+```mermaid
+---
+title: tool-monitor — Merkle-CFI Harness
+---
+flowchart TD
+    classDef scaffold fill:#0d1117,stroke:#22d3ee,stroke-width:2px,color:#22d3ee
+    classDef model    fill:#0d1117,stroke:#818cf8,stroke-width:2px,color:#a5b4fc
+    classDef merkle   fill:#0d1117,stroke:#eab308,stroke-width:2px,color:#fde047
+    classDef halt     fill:#0d1117,stroke:#ef4444,stroke-width:2px,color:#fca5a5
+    classDef io       fill:#0d1117,stroke:#475569,stroke-width:2px,color:#94a3b8
+    classDef decision fill:#1e1e2e,stroke:#475569,stroke-width:1px,color:#94a3b8
+
+    IN([User Prompt]):::io
+
+    UM[User Model]:::model
+    ROUTE{PtE token?}:::decision
+
+    PARSE[Scaffold: parse + validate plan]:::scaffold
+    MERKLE[Merkle Tree: commit root]:::merkle
+    GATE[Tool Model: inspect plan\nreason about end-state]:::model
+    GATE_Q{Safe?}:::decision
+
+    VERIFY[Scaffold: verify leaf hash]:::merkle
+    VERIFY_Q{Hash valid?}:::decision
+    REACT[Tool Model: ReACT cycle\nThought → Action → Args]:::model
+    EXECUTE[Scaffold: execute tool]:::scaffold
+    NEXT{More steps?}:::decision
+
+    POST[Scaffold: verify root]:::merkle
+    POST_Q{Root match?}:::decision
+
+    SYNTH[User Model: synthesize\nfrom verified trace]:::model
+    OUT([Final Response]):::io
+
+    DIRECT([Direct Response]):::io
+    HALT_GATE([HALT — rejected by safety gate]):::halt
+    HALT_HASH([HALT — integrity breach]):::halt
+    HALT_ROOT([HALT — root mismatch]):::halt
+
+    IN          --> UM
+    UM          --> ROUTE
+    ROUTE       -- No  --> DIRECT
+    ROUTE       -- Yes --> PARSE
+    PARSE       --> MERKLE
+    MERKLE      --> GATE
+    GATE        --> GATE_Q
+    GATE_Q      -- Unsafe --> HALT_GATE
+    GATE_Q      -- Safe   --> VERIFY
+    VERIFY      --> VERIFY_Q
+    VERIFY_Q    -- Fail   --> HALT_HASH
+    VERIFY_Q    -- Pass   --> REACT
+    REACT       --> EXECUTE
+    EXECUTE     --> NEXT
+    NEXT        -- N+1  --> VERIFY
+    NEXT        -- Done --> POST
+    POST        --> POST_Q
+    POST_Q      -- Fail --> HALT_ROOT
+    POST_Q      -- Pass --> SYNTH
+    SYNTH       --> OUT
+
+    MERKLE -.->|same root| POST
 ```
 
 ---
