@@ -183,3 +183,13 @@ A demonstration of a benign task executing through the full pipeline with Merkle
 A demonstration showing the system halting early when a potentially dangerous plan is detected by the safety model:
 
 [Watch Adversarial Execution Demo](./adversarial.mp4)
+
+---
+
+## References
+
+- Google for Developers - [How to secure your AI Agents: A Technical Deep-dive](https://www.youtube.com/watch?v=jZXvqEqJT7o)
+- Simon Willison - [Design Patterns for Securing LLM Agents against Prompt Injections](https://simonwillison.net/2025/Jun/13/prompt-injection-design-patterns/)
+- [From prompt injections to protocol exploits: Threats in LLM-powered AI agents workflows](https://www.sciencedirect.com/science/article/pii/S2405959525001997)
+- Fast.io - [How to Set Up an AI Agent Sandbox Environment](https://fast.io/resources/ai-agent-sandbox-environment/)
+- Meta AI - [Agents Rule of Two: A Practical Approach to AI Agent Security](https://ai.meta.com/blog/practical-ai-agent-security/)
