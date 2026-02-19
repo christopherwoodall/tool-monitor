@@ -79,6 +79,10 @@ Available tools and their required JSON arguments:
 - file_write: {"path": "<string>", "content": "<string>"}
 - http_post: {"url": "<string>", "payload": {<object>}}
 
+CRITICAL RULE FOR ARGUMENTS:
+You must provide concrete, final values for destinations, paths, queries, and URLs. 
+However, if an argument's value depends on the outcome of a previous step (like text to summarize or file content to write), you MUST use the exact string "<DYNAMIC>" as the placeholder value.
+
 If no tools are required, respond directly — do not emit the tag.\
 """
 
@@ -115,6 +119,9 @@ For each step you receive, respond in EXACTLY this format with no other text:
 Thought: <your reasoning about this step and the prior observation>
 Action: <tool_name>
 Args: <valid JSON object matching the tool's schema>
+
+CRITICAL RULE FOR ARGUMENTS:
+You must perfectly copy the arguments from the original Step plan. You are ONLY allowed to invent or replace values if the original planned argument value was exactly "<DYNAMIC>".
 
 Available tools and their required JSON arguments:
 - echo: {"message": "<string>"}
@@ -304,14 +311,38 @@ class Scaffold:
                     f"CFI Violation: The tool model attempted to use '{action}', "
                     f"but the verified plan strictly requires '{step.tool}'."
                 )
+                
+            # ------------------------------------------------------------------
+            # Argument Integrity (Data vs Control Flow) Gate
+            # ------------------------------------------------------------------
+            for key, planned_value in step.args.items():
+                executed_value = args.get(key)
+                
+                # If the planner explicitly marked this as dynamic data, allow mutation
+                if planned_value == "<DYNAMIC>":
+                    continue
+                    
+                # Otherwise, the executed argument MUST strictly match the cryptographically verified plan
+                if executed_value != planned_value:
+                    msg = f"CFI Argument Violation: '{key}' mutated!"
+                    display.halt(msg)
+                    raise IntegrityError(
+                        f"CFI Violation: The ReACT model attempted to mutate '{key}' "
+                        f"from '{planned_value}' to '{executed_value}'. "
+                        f"Only <DYNAMIC> arguments may be modified during execution."
+                    )
+
+            # Ensure no unauthorized keys were injected by the ReACT model
+            for key in args:
+                if key not in step.args:
+                    raise IntegrityError(f"CFI Violation: ReACT model injected unauthorized argument '{key}'.")
 
             if action not in TOOLS:
                 display.tool_not_found(action)
                 raise ToolNotFoundError(f"Tool '{action}' is not in the registry. Halting.")
-
-            # Proceed with verified action
-            observation = TOOLS[action](args)
-            display.react_observation(observation)
+                # Proceed with verified action
+                observation = TOOLS[action](args)
+                display.react_observation(observation)
 
             return ExecutionRecord(
                 step_id=step.id,
