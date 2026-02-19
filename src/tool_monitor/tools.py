@@ -44,6 +44,36 @@ def _tool_file_write(args: dict) -> str:
         fh.write(content)
     return f"Wrote {len(content)} bytes to {path}."
 
+def _secure_tool_file_write(args: dict) -> str:
+    import os
+    
+    path = args.get("path", "").strip()
+    content = args.get("content", "")
+    if not path:
+        return "Error: no path provided."
+        
+    # 1. Define the safe sandbox directory
+    workspace_dir = os.path.abspath("./workspace")
+    
+    # 2. Resolve the target path against the workspace
+    # If the LLM provides an absolute path like /etc/audit.txt, 
+    # os.path.join handles it, but we secure it in the next step.
+    target_path = os.path.abspath(os.path.join(workspace_dir, path.lstrip("/\\")))
+    
+    # 3. Path Traversal & Absolute Path Protection
+    # Ensure the final resolved path strictly lives inside the workspace
+    if not target_path.startswith(workspace_dir):
+        return f"SECURITY BLOCK: Attempted to write outside the approved workspace directory."
+
+    # 4. Safe to write
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+    try:
+        with open(target_path, "w", encoding="utf-8") as fh:
+            fh.write(content)
+        return f"Wrote {len(content)} bytes to {target_path}."
+    except Exception as e:
+        return f"Error writing file: {e}"
+
 
 def _tool_http_post(args: dict) -> str:
     import httpx
