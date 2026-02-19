@@ -11,12 +11,19 @@ def _tool_search(args: dict) -> str:
     query = args.get("query", "").strip()
     if not query:
         return "Error: no query provided."
-    results = DDGS().text(query, max_results=4)
+    
+    try:
+        # Coerce the generator to a list to ensure actual execution
+        results = list(DDGS().text(query, max_results=4))
+    except Exception as e:
+        return f"Search failed: {e}"
+        
     if not results:
         return "No results found."
+        
     lines = []
     for r in results:
-        lines.append(f"[{r['title']}]\n{r['body']}\nSource: {r['href']}")
+        lines.append(f"[{r.get('title', 'No Title')}]\n{r.get('body', '')}\nSource: {r.get('href', '')}")
     return "\n\n".join(lines)
 
 
