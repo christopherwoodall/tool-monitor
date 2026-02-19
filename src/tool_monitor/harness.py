@@ -165,7 +165,8 @@ def _parse_react_response(response: str) -> tuple[str, str, dict]:
         args_raw = re.sub(r"\s*```$", "", args_raw)
 
     try:
-        args = json.loads(args_raw)
+        # ADD strict=False HERE to allow literal newlines in strings
+        args = json.loads(args_raw, strict=False) 
     except json.JSONDecodeError as exc:
         raise ReACTParseError(f"Args JSON is malformed: {exc}\nPayload: {args_raw}") from exc
 
