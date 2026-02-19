@@ -16,11 +16,13 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "rich>=13.0.0",
     "ddgs",
-    "pytest"
+    "pytest",
+    "rich",
 ]
 
 [project.scripts]
 tool-monitor = "tool_monitor.run:main"
+tool-graph = "tool_monitor.graph_run:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tool_monitor"]

@@ -80,8 +80,8 @@ Available tools and their required JSON arguments:
 - http_post: {"url": "<string>", "payload": {<object>}}
 
 CRITICAL RULE FOR ARGUMENTS:
-You must provide concrete, final values for destinations, paths, queries, and URLs. 
-However, if an argument's value depends on the outcome of a previous step (like text to summarize or file content to write), you MUST use the exact string "<DYNAMIC>" as the placeholder value.
+You must provide concrete, final values for all Control Variables (destinations, paths, queries, and URLs). THESE CAN NEVER BE DYNAMIC.
+However, if a Data Variable (like text to summarize, or file content to write) depends on the outcome of a previous step, you MUST use the exact string "<DYNAMIC>" as the placeholder value.
 
 If no tools are required, respond directly — do not emit the tag.\
 """
@@ -201,11 +201,24 @@ class Scaffold:
     """
 
     def __init__(self, user_model: str, tool_model: str) -> None:
+        import httpx  # Added to configure the underlying client
+
         self._user_model = user_model
         self._tool_model = tool_model
+        
+        # 1. Sanitize the base URL (fixes missing https://)
+        base_url = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1").strip()
+        if not base_url.startswith(("http://", "https://")):
+            base_url = f"https://{base_url}"
+
+        # 2. Defensively configure the client to ignore bad proxy env vars
+        # Using trust_env=False instead of proxies=None for httpx >= 0.28 compatibility
+        custom_http_client = httpx.Client(trust_env=False)
+
         self._client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
+            base_url=base_url,
             api_key=os.getenv("OPENROUTER_API_KEY"),
+            http_client=custom_http_client
         )
         display.banner(user_model, tool_model)
 
@@ -278,81 +291,82 @@ class Scaffold:
     # ------------------------------------------------------------------
 
     def _execute_step(self, step: Step, prior_observation: str) -> ExecutionRecord:
-            """
-            Single ReACT cycle for one plan step.
+        """
+        Single ReACT cycle for one plan step.
 
-            The tool model reasons (Thought), declares intent (Action + Args),
-            and the harness executes against the registry (Observation).
-            The tool model never directly invokes anything.
-            """
-            messages = [
-                {"role": "system", "content": TOOL_REACT_PROMPT},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Step:\n{step.model_dump_json(indent=2)}\n\n"
-                        f"Prior observation: {prior_observation or 'None'}"
-                    ),
-                },
-            ]
-            response = self.call_tool_model(messages)
-            thought, action, args = _parse_react_response(response)
+        The tool model reasons (Thought), declares intent (Action + Args),
+        and the harness executes against the registry (Observation).
+        The tool model never directly invokes anything.
+        """
+        messages = [
+            {"role": "system", "content": TOOL_REACT_PROMPT},
+            {
+                "role": "user",
+                "content": (
+                    f"Step:\n{step.model_dump_json(indent=2)}\n\n"
+                    f"Prior observation: {prior_observation or 'None'}"
+                ),
+            },
+        ]
+        response = self.call_tool_model(messages)
+        thought, action, args = _parse_react_response(response)
 
-            display.react_thought(thought)
-            display.react_action(action, args)
+        display.react_thought(thought)
+        display.react_action(action, args)
 
-            # ------------------------------------------------------------------
-            # Control Flow Integrity (CFI) Gate
-            # ------------------------------------------------------------------
-            if action != step.tool:
-                msg = f"CFI Violation: Expected '{step.tool}', got '{action}'."
+        # ------------------------------------------------------------------
+        # Control Flow Integrity (CFI) Gate
+        # ------------------------------------------------------------------
+        if action != step.tool:
+            msg = f"CFI Violation: Expected '{step.tool}', got '{action}'."
+            display.halt(msg)
+            raise IntegrityError(
+                f"CFI Violation: The tool model attempted to use '{action}', "
+                f"but the verified plan strictly requires '{step.tool}'."
+            )
+            
+        # ------------------------------------------------------------------
+        # Argument Integrity (Data vs Control Flow) Gate
+        # ------------------------------------------------------------------
+        for key, planned_value in step.args.items():
+            executed_value = args.get(key)
+            
+            # If the planner explicitly marked this as dynamic data, allow mutation
+            if planned_value == "<DYNAMIC>":
+                continue
+                
+            # Otherwise, the executed argument MUST strictly match the cryptographically verified plan
+            if executed_value != planned_value:
+                msg = f"CFI Argument Violation: '{key}' mutated!"
                 display.halt(msg)
                 raise IntegrityError(
-                    f"CFI Violation: The tool model attempted to use '{action}', "
-                    f"but the verified plan strictly requires '{step.tool}'."
+                    f"CFI Violation: The ReACT model attempted to mutate '{key}' "
+                    f"from '{planned_value}' to '{executed_value}'. "
+                    f"Only <DYNAMIC> arguments may be modified during execution."
                 )
-                
-            # ------------------------------------------------------------------
-            # Argument Integrity (Data vs Control Flow) Gate
-            # ------------------------------------------------------------------
-            for key, planned_value in step.args.items():
-                executed_value = args.get(key)
-                
-                # If the planner explicitly marked this as dynamic data, allow mutation
-                if planned_value == "<DYNAMIC>":
-                    continue
-                    
-                # Otherwise, the executed argument MUST strictly match the cryptographically verified plan
-                if executed_value != planned_value:
-                    msg = f"CFI Argument Violation: '{key}' mutated!"
-                    display.halt(msg)
-                    raise IntegrityError(
-                        f"CFI Violation: The ReACT model attempted to mutate '{key}' "
-                        f"from '{planned_value}' to '{executed_value}'. "
-                        f"Only <DYNAMIC> arguments may be modified during execution."
-                    )
 
-            # Ensure no unauthorized keys were injected by the ReACT model
-            for key in args:
-                if key not in step.args:
-                    raise IntegrityError(f"CFI Violation: ReACT model injected unauthorized argument '{key}'.")
+        # Ensure no unauthorized keys were injected by the ReACT model
+        for key in args:
+            if key not in step.args:
+                raise IntegrityError(f"CFI Violation: ReACT model injected unauthorized argument '{key}'.")
 
-            if action not in TOOLS:
-                display.tool_not_found(action)
-                raise ToolNotFoundError(f"Tool '{action}' is not in the registry. Halting.")
-                # Proceed with verified action
-                observation = TOOLS[action](args)
-                display.react_observation(observation)
+        if action not in TOOLS:
+            display.tool_not_found(action)
+            raise ToolNotFoundError(f"Tool '{action}' is not in the registry. Halting.")
+            
+        # Proceed with verified action
+        observation = TOOLS[action](args)
+        display.react_observation(observation)
 
-            return ExecutionRecord(
-                step_id=step.id,
-                tool=action,
-                args=args,
-                description=step.description,
-                thought=thought,
-                observation=observation,
-                hash_verified=True,
-            )
+        return ExecutionRecord(
+            step_id=step.id,
+            tool=action,
+            args=args,
+            description=step.description,
+            thought=thought,
+            observation=observation,
+            hash_verified=True,
+        )
 
     def execute_plan(self, plan: Plan, tree: MerkleTree) -> list[ExecutionRecord]:
         """
