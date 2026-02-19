@@ -23,6 +23,7 @@ dependencies = [
 [project.scripts]
 tool-monitor = "tool_monitor.run:main"
 tool-graph = "tool_monitor.graph_run:main"
+tool-flame = "tool_monitor.flame_run:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tool_monitor"]
