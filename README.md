@@ -185,6 +185,24 @@ A demonstration showing the system halting early when a potentially dangerous pl
 
 ---
 
+## Test Suite
+
+The project includes a comprehensive test suite validating the security and resilience of the harness.
+
+```bash
+# Run the full suite
+pytest tests/
+```
+
+Key coverage areas:
+- **Parser Resilience:** Verifies handling of malformed JSON, markdown blocks, and missing fields.
+- **Security Sandboxing:** Confirms path traversal attempts are blocked by the secure file writer.
+- **Control Flow Integrity (CFI):** Ensures the tool model cannot execute unapproved tools.
+- **Merkle Verification:** Validates that any plan tampering triggers an immediate `IntegrityError`.
+- **API Handling:** Mocks network failures and empty results for the search tool.
+
+---
+
 ## References
 
 - Google for Developers - [How to secure your AI Agents: A Technical Deep-dive](https://www.youtube.com/watch?v=jZXvqEqJT7o)
