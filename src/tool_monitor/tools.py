@@ -7,7 +7,7 @@ from typing import Any
 
 
 def _tool_search(args: dict) -> str:
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS
     query = args.get("query", "").strip()
     if not query:
         return "Error: no query provided."
