@@ -29,6 +29,16 @@ harness.py    — Scaffold class: all orchestration, routing, verification
 run.py        — Entry point: config + wiring only
 ```
 
+## Execution Flows
+
+### Safe Execution
+
+[<img src="./docs/safe.png" width="600" alt="Safe execution flow screenshot">](./docs/safe.png)
+
+### Adversarial Execution
+
+[<img src="./docs/harmful.png" width="600" alt="Adversarial execution flow screenshot">](./docs/harmful.png)
+
 ## Control Flow
 
 ```mermaid
@@ -165,13 +175,13 @@ model string from [openrouter.ai/models](https://openrouter.ai/models).
 
 A demonstration of a benign task executing through the full pipeline with Merkle verification at each step:
 
-[Watch Safe Execution Demo](./safe.mp4)
+[Watch Safe Execution Demo](./docs/safe.mp4)
 
 ### Adversarial Execution Flow
 
 A demonstration showing the system halting early when a potentially dangerous plan is detected by the safety model:
 
-[Watch Adversarial Execution Demo](./adversarial.mp4)
+[Watch Adversarial Execution Demo](./docs/adversarial.mp4)
 
 ---
 
