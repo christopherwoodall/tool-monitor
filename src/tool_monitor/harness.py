@@ -150,11 +150,17 @@ def _parse_react_response(response: str) -> tuple[str, str, dict]:
 
     thought = thought_match.group(1).strip()
     action = action_match.group(1).strip()
+    args_raw = args_match.group(1).strip()
+
+    # Strip markdown code blocks if the LLM injected them
+    if args_raw.startswith("```"):
+        args_raw = re.sub(r"^```(?:json)?\s*", "", args_raw)
+        args_raw = re.sub(r"\s*```$", "", args_raw)
 
     try:
-        args = json.loads(args_match.group(1).strip())
+        args = json.loads(args_raw)
     except json.JSONDecodeError as exc:
-        raise ReACTParseError(f"Args JSON is malformed: {exc}") from exc
+        raise ReACTParseError(f"Args JSON is malformed: {exc}\nPayload: {args_raw}") from exc
 
     return thought, action, args
 
@@ -257,45 +263,57 @@ class Scaffold:
     # ------------------------------------------------------------------
 
     def _execute_step(self, step: Step, prior_observation: str) -> ExecutionRecord:
-        """
-        Single ReACT cycle for one plan step.
+            """
+            Single ReACT cycle for one plan step.
 
-        The tool model reasons (Thought), declares intent (Action + Args),
-        and the harness executes against the registry (Observation).
-        The tool model never directly invokes anything.
-        """
-        messages = [
-            {"role": "system", "content": TOOL_REACT_PROMPT},
-            {
-                "role": "user",
-                "content": (
-                    f"Step:\n{step.model_dump_json(indent=2)}\n\n"
-                    f"Prior observation: {prior_observation or 'None'}"
-                ),
-            },
-        ]
-        response = self.call_tool_model(messages)
-        thought, action, args = _parse_react_response(response)
+            The tool model reasons (Thought), declares intent (Action + Args),
+            and the harness executes against the registry (Observation).
+            The tool model never directly invokes anything.
+            """
+            messages = [
+                {"role": "system", "content": TOOL_REACT_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Step:\n{step.model_dump_json(indent=2)}\n\n"
+                        f"Prior observation: {prior_observation or 'None'}"
+                    ),
+                },
+            ]
+            response = self.call_tool_model(messages)
+            thought, action, args = _parse_react_response(response)
 
-        display.react_thought(thought)
-        display.react_action(action, args)
+            display.react_thought(thought)
+            display.react_action(action, args)
 
-        if action not in TOOLS:
-            display.tool_not_found(action)
-            raise ToolNotFoundError(f"Tool '{action}' is not in the registry. Halting.")
+            # ------------------------------------------------------------------
+            # Control Flow Integrity (CFI) Gate
+            # ------------------------------------------------------------------
+            if action != step.tool:
+                msg = f"CFI Violation: Expected '{step.tool}', got '{action}'."
+                display.halt(msg)
+                raise IntegrityError(
+                    f"CFI Violation: The tool model attempted to use '{action}', "
+                    f"but the verified plan strictly requires '{step.tool}'."
+                )
 
-        observation = TOOLS[action](args)
-        display.react_observation(observation)
+            if action not in TOOLS:
+                display.tool_not_found(action)
+                raise ToolNotFoundError(f"Tool '{action}' is not in the registry. Halting.")
 
-        return ExecutionRecord(
-            step_id=step.id,
-            tool=action,
-            args=args,
-            description=step.description,
-            thought=thought,
-            observation=observation,
-            hash_verified=True,
-        )
+            # Proceed with verified action
+            observation = TOOLS[action](args)
+            display.react_observation(observation)
+
+            return ExecutionRecord(
+                step_id=step.id,
+                tool=action,
+                args=args,
+                description=step.description,
+                thought=thought,
+                observation=observation,
+                hash_verified=True,
+            )
 
     def execute_plan(self, plan: Plan, tree: MerkleTree) -> list[ExecutionRecord]:
         """
